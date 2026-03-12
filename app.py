@@ -17,6 +17,16 @@ CORS(app)  # Allow requests from the HTML frontend
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# Cookies file for bypassing YouTube bot detection
+COOKIES_FILE = os.path.join(os.path.dirname(__file__), "cookies.txt")
+
+def base_opts():
+    """Base yt-dlp options, with cookies if available."""
+    opts = {"quiet": True, "no_warnings": True}
+    if os.path.exists(COOKIES_FILE):
+        opts["cookiefile"] = COOKIES_FILE
+    return opts
+
 # Track job status in memory
 jobs = {}
 
@@ -33,7 +43,7 @@ def get_info():
         return jsonify({"error": "No URL provided"}), 400
 
     try:
-        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+        with yt_dlp.YoutubeDL(base_opts()) as ydl:
             info = ydl.extract_info(url, download=False)
             duration = info.get("duration", 0)
             mins, secs = divmod(int(duration), 60)
@@ -78,28 +88,24 @@ def convert():
         out_template = os.path.join(get_output_path(job_id) + ".%(ext)s")
 
         if fmt == "mp4":
-            ydl_opts = {
+            ydl_opts = {**base_opts(), **{
                 "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                 "outtmpl": out_template,
                 "progress_hooks": [progress_hook],
-                "quiet": True,
-                "no_warnings": True,
-            }
+            }}
         else:
             codec_map = {"mp3": "mp3", "wav": "wav", "aac": "aac", "opus": "opus", "webm": "webm"}
             codec = codec_map.get(fmt, "mp3")
-            ydl_opts = {
+            ydl_opts = {**base_opts(), **{
                 "format": "bestaudio/best",
                 "outtmpl": out_template,
                 "progress_hooks": [progress_hook],
-                "quiet": True,
-                "no_warnings": True,
                 "postprocessors": [{
                     "key": "FFmpegExtractAudio",
                     "preferredcodec": codec,
                     "preferredquality": quality,
                 }],
-            }
+            }}
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
